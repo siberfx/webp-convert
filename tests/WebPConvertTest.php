@@ -10,6 +10,11 @@
 namespace WebPConvert\Tests;
 
 use WebPConvert\WebPConvert;
+use WebPConvert\Convert\Exceptions\ConversionFailed\ConverterNotOperationalException;
+//use WebPConvert\Convert\Exceptions\ConversionFailed\InvalidInput\TargetNotFoundException;
+use WebPConvert\Exceptions\InvalidInput\TargetNotFoundException;
+use WebPConvert\Convert\Exceptions\ConversionFailed\FileSystemProblems\CreateDestinationFolderException;
+
 use PHPUnit\Framework\TestCase;
 
 class WebPConvertTest extends TestCase
@@ -131,22 +136,28 @@ https://phpunit.readthedocs.io/en/7.1/writing-tests-for-phpunit.html#testing-exc
     */
     public function testConvertWithNoConverters()
     {
-        //$this->expectException(\WebPConvert\Exceptions\NoOperationalConvertersException::class);
+        $this->expectException(ConverterNotOperationalException::class);
         $source = __DIR__ . '/test.jpg';
         $destination = __DIR__ . '/test.jpg.webp';
         $result = WebPConvert::convert($source, $destination, array(
             'converters' => array()
         ));
-        $this->assertFalse($result);
+        //$this->assertFalse($result);
     }
 
 
     public function testTargetNotFound()
     {
-        $this->expectException(\WebPConvert\Exceptions\TargetNotFoundException::class);
+        $this->expectException(TargetNotFoundException::class);
 
         WebPConvert::convert(__DIR__ . '/i-dont-existno.jpg', __DIR__ . '/i-dont-exist.webp');
         //$this->assertTrue($result);
+    }
+
+    public function warningHandler($errno, $errstr, $errfile, $errline)
+    {
+        //echo 'warning handler here';
+        //return false;
     }
 
     public function testInvalidDestinationFolder()
@@ -156,18 +167,39 @@ https://phpunit.readthedocs.io/en/7.1/writing-tests-for-phpunit.html#testing-exc
         // I have reconfigured php unit to not turn warnings into exceptions (phpunit.xml.dist)
         // - if I did not do that, the exception would not be CreateDestinationFolderException
 
-        $this->expectException(\WebPConvert\Exceptions\CreateDestinationFolderException::class);
+        $this->expectException(CreateDestinationFolderException::class);
+        //$this->expectException(\Exception::class);
+
+
+        // Set error handler in order to suppress warnings.
+        // (we probably get a warning because mkdir() does not have permission to create the dir it is asked to)
+        $handler = set_error_handler(
+            array($this, "warningHandler"),
+            E_WARNING | E_USER_WARNING | E_NOTICE | E_USER_NOTICE | E_USER_ERROR
+        );
+        //echo 'previously defined handler:' . print_r($handler, true);*/
+
+        /*
+        set_error_handler(
+            array($this, "warningHandler"),
+            E_ALL
+        );
+
+        chown();*/
 
         // I here assume that no system grants write access to their root folder
         // this is perhaps wrong to assume?
         $destinationFolder = '/you-can-delete-me/';
 
         WebPConvert::convert(__DIR__ . '/test.jpg', $destinationFolder . 'you-can-delete-me.webp');
+
+        restore_error_handler();
     }
 
     /**
-     * Test ConversionDeclinedException by testing Gd.
+     * Test ConversionSkippedException by testing Gd.
      */
+     /*
     public function testDeclined()
     {
         // only try Gd
@@ -190,16 +222,16 @@ https://phpunit.readthedocs.io/en/7.1/writing-tests-for-phpunit.html#testing-exc
         );
         try {
             WebPConvert::convert($source, $destination, $options);
-        } catch (\WebPConvert\Converters\Exceptions\ConverterNotOperationalException $e) {
+        } catch (\WebPConvert\Convert\Exceptions\SystemRequirementsNotMetException $e) {
             // converter isn't operational, so we cannot make the unit test
             return;
-        } catch (\WebPConvert\Converters\Exceptions\ConversionDeclinedException $e) {
+        } catch (\WebPConvert\Convert\Exceptions\ConversionFailed\ConversionSkippedException $e) {
             // Yeah, this is what we want to test.
 
-            $this->expectException(\WebPConvert\Converters\Exceptions\ConversionDeclinedException::class);
+            $this->expectException(\WebPConvert\Convert\Exceptions\ConversionFailed\ConversionSkippedException::class);
             WebPConvert::convert($source, $destination, $options);
         }
-    }
+    }*/
 
 
     // How to test CreateDestinationFileException ?

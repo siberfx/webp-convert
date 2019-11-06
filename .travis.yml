@@ -1,18 +1,130 @@
+
+# Other projects which deals with images in PHP and uses travis:
+# https://github.com/JBZoo/Image
+# https://travis-ci.org/peter279k/php-image-converter/builds
+
 language: php
 
-php:
-  - 5.6
-  - 7.0
-  - 7.1
-  - 7.2
+#php:
+#  - 5.6
+#  - 7.1
+#  - 7.2
+#  - 7.3
 
-dist: trusty
+# cache composer?
+#   https://blog.wyrihaximus.net/2015/07/composer-cache-on-travis/
+#   https://github.com/thephpleague/glide/blob/master/.travis.yml
+cache:
+  #apt: true
+  directories:
+    - "$HOME/opt"     # cache our imagick/gmagick install
+    - $HOME/vips
+
+addons:
+  apt:
+    packages:
+      - libjpeg-dev
+      - libpng-dev
+      - libwebp-dev
+
+      # following for vips (taken from https://github.com/libvips/php-vips/blob/master/.travis.yml)
+      - gobject-introspection
+      - libcfitsio3-dev
+      - libfftw3-dev
+      - libgif-dev
+      - libgs-dev
+      - libgsf-1-dev
+      - libmatio-dev
+      - libopenslide-dev
+      - liborc-0.4-dev
+      - libpango1.0-dev
+      - libpoppler-glib-dev
 
 sudo: false
 
+matrix:
+  fast_finish: true
+  include:
+    - name: "Rather new setup (PHP 7.3, Xenial)"
+      php: 7.3
+      #dist: trusty
+      dist: xenial
+      #dist: bionic
+      env:
+      - UPLOADCOVERAGE=0
+      - PHPSTAN=1
+      - INSTALLVIPS=1
+      #- VIPS_VERSION="8.6.3"
+      - VIPS_VERSION="8.7.4"
+      - INSTALLIMAGEMAGICK=0        # imagemagick.org is currently down... - so installation cannot download gzip
+      #- IMAGEMAGICK_VERSION="7.0.8-43"
+
+    - name: "Standard setup (PHP 7.1, Xenial) - with coverage upload"
+      php: 7.1
+      #dist: trusty
+      dist: xenial
+      #dist: bionic
+      env:
+      - UPLOADCOVERAGE=1
+      - PHPSTAN=1
+      - INSTALLVIPS=1
+      - VIPS_VERSION="8.6.3"
+      #- VIPS_VERSION="8.7.4"
+      - INSTALLIMAGICK=1
+      - IMAGEMAGICK_VERSION="7.0.8-43"
+
+    - name: "Old setup (PHP 5.6, Trusty)"
+      php: 5.6
+      dist: trusty
+      #dist: xenial
+      #dist: bionic
+      env:
+      - UPLOADCOVERAGE=0
+      - PHPSTAN=0
+      - INSTALLVIPS=0
+      #- VIPS_VERSION="8.7.4"
+      - INSTALLIMAGEMAGICK=0        # imagemagick.org is currently down... - so installation cannot download gzip
+  #allow_failures:
+
+before_install:
+  # VIPS
+  - if [[ $INSTALLVIPS == 1 ]]; then bash install-vips.sh; fi
+
+  # Update PATH so that travis can find our imagemagick / gmagick
+  - export PATH=$HOME/opt/bin:$PATH
+
+  # ImageMagick
+  - if [[ $INSTALLIMAGEMAGICK == 1 ]]; then bash install-imagemagick-with-webp.sh; fi
+
+  # install imagick extension (if not already there)
+  # hm, not working
+  #- echo '' | pecl install imagick
+
+  # GMagick
+
+  - bash install-gmagick-with-webp.sh
+  #- export GMAGICK_PATH=$HOME/opt/bin
+
+  # Hm, extension is not working yet. When I get to install the extension I get the message:
+  #    "Please provide a path to GraphicsMagick-config program."
+  #    According to here: https://stackoverflow.com/questions/8626558/please-provide-the-prefix-of-graphicsmagick-installation-autodetect
+  #    it is because the libgraphicsmagick1-dev package is not installed
+  #    But is that needed when we are building ?
+  #- echo '' | pecl install gmagick-beta
+
 before_script:
+  #- echo $PATH
   - (composer self-update; true)
   - composer install
+  - if [[ $PHPSTAN == 1 ]]; then composer require --dev phpstan/phpstan:"^0.11.5"; fi
 
 script:
   - composer test
+  - if [[ $PHPSTAN == 1 ]]; then vendor/bin/phpstan analyse src --level=4; fi
+
+after_script:
+  - |
+    if [[ $UPLOADCOVERAGE == 1 ]]; then
+      wget https://scrutinizer-ci.com/ocular.phar
+      php ocular.phar code-coverage:upload --format=php-clover coverage.clover
+    fi
